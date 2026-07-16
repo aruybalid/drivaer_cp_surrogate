@@ -1,0 +1,9 @@
+torch>=2.0
+numpy
+pyvista
+vtk
+plotly
+streamlit
+huggingface_hub
+scikit-learn  # for optional normalization helpers
+tqdm
