@@ -37,11 +37,10 @@ with st.sidebar:
 
     uploaded_model = st.file_uploader("Upload trained model (.pt)", type=['pt'])
     uploaded_vtp = st.file_uploader("Upload geometry (.vtp)", type=['vtp'])
-    use_demo = st.button("Use Held-out Demo (run_2)")
 
     target_faces = st.slider("Decimation target faces", 10000, 100000, 500000, step=10000)
 
-    can_run = uploaded_model is not None and (uploaded_vtp is not None or use_demo)
+    can_run = uploaded_model is not None and uploaded_vtp is not None
     run_inference = st.button("▶ Run Inference", type="primary", disabled=not can_run)
 
 # ============================================================
@@ -57,13 +56,6 @@ def load_raw_mesh_from_upload(uploaded_file):
 
 if uploaded_vtp and st.session_state.raw_mesh is None:
     st.session_state.raw_mesh = load_raw_mesh_from_upload(uploaded_vtp)
-
-if use_demo and st.session_state.raw_mesh is None:
-    demo_path = Path("./references/run_2/boundary_2.vtp")
-    if demo_path.exists():
-        st.session_state.raw_mesh = pv.read(str(demo_path))
-    else:
-        st.error("Demo file not found. Please place a .vtp in references/run_2/.")
 
 # ============================================================
 # Tabs
@@ -96,12 +88,9 @@ if run_inference and uploaded_model:
         tmp_model.write(uploaded_model.getvalue())
         model_path = tmp_model.name
 
-    if use_demo:
-        vtp_path = str(Path("./references/run_2/boundary_2.vtp"))
-    else:
-        with tempfile.NamedTemporaryFile(suffix='.vtp', delete=False) as tmp_vtp:
-            tmp_vtp.write(uploaded_vtp.getvalue())
-            vtp_path = tmp_vtp.name
+    with tempfile.NamedTemporaryFile(suffix='.vtp', delete=False) as tmp_vtp:
+        tmp_vtp.write(uploaded_vtp.getvalue())
+        vtp_path = tmp_vtp.name
 
     # === Progress feedback with rotating images ===
     progress_placeholder = st.empty()
@@ -127,8 +116,7 @@ if run_inference and uploaded_model:
 
     # Cleanup
     Path(model_path).unlink(missing_ok=True)
-    if not use_demo:
-        Path(vtp_path).unlink(missing_ok=True)
+    Path(vtp_path).unlink(missing_ok=True)
 
     progress_placeholder.empty()
     status_text.empty()
@@ -176,13 +164,30 @@ with tab2:
                 st.plotly_chart(fig2, width='content')
 
             # Absolute Error
+
+            # Explicit inferno scale that always starts at black when cmin=0
+            inferno_scale = [
+                [0.0, 'rgb(0, 0, 0)'],      # black
+                [0.2, 'rgb(40, 11, 84)'],
+                [0.4, 'rgb(101, 21, 110)'],
+                [0.6, 'rgb(159, 42, 99)'],
+                [0.8, 'rgb(212, 80, 60)'],
+                [1.0, 'rgb(255, 165, 0)']   # bright yellow/orange
+                ]
             st.markdown("**Absolute Error**")
-            error = processed.cell_data['error']
+            error = np.log10(processed.cell_data['error'] + 1e-12)  # log scale for better visualization
+            
+            # Define where the ticks should appear (in log space)
+            tickvals = [-2, -1.5, -1, -0.5, 0]
+            # Define what the user actually sees
+            ticktext = ['0.01', '0.032', '0.1', '0.32', '1.0']
+
             fig_err = go.Figure(data=[go.Scatter3d(
                 x=centers[:, 0], y=centers[:, 1], z=centers[:, 2],
                 mode='markers',
-                marker=dict(size=2, color=error, colorscale='inferno',
-                            cmin=0, cmax=2, colorbar=dict(title="|Error|")),
+                marker=dict(size=2, color=error, colorscale=inferno_scale,
+                            cmin=-2, cmax=0, colorbar=dict(title="log10(|Error|)",
+                            tickvals=tickvals, ticktext=ticktext)),
             )])
             fig_err.update_layout(scene=dict(aspectmode='data'), height=500)
             st.plotly_chart(fig_err, width='content')
@@ -190,11 +195,11 @@ with tab2:
             # Metrics
             col1, col2, col3 = st.columns(3)
             with col1:
-                st.metric("Mean Absolute Error", f"{error.mean():.4f}")
+                st.metric("Mean Absolute Error", f"{(10**error - 1e-12).mean():.4f}")
             with col2:
-                st.metric("Max Absolute Error", f"{error.max():.4f}")
+                st.metric("Max Absolute Error", f"{(10**error - 1e-12).max():.4f}")
             with col3:
-                st.metric("Median Absolute Error", f"{np.median(error):.4f}")
+                st.metric("Median Absolute Error", f"{np.median(10**error - 1e-12):.4f}")
 
         else:
             st.markdown("**Predicted Cp**")
