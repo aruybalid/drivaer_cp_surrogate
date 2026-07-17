@@ -11,11 +11,8 @@ from pathlib import Path
 import argparse
 import time
 from tqdm import tqdm
-from model import PointNetCpRegressor
+from model_factory import MODEL_REGISTRY, MODELS_WITH_PARAMS, get_model
 
-# ============================================================
-# Dataset
-# ============================================================
 class DrivAerDataset(Dataset):
     def __init__(self, processed_dir, run_list, augment=True):
         self.files = [Path(processed_dir) / f'{r}.pt' for r in run_list]
@@ -27,37 +24,37 @@ class DrivAerDataset(Dataset):
 
     def __getitem__(self, idx):
         d = self.data[idx]
-        feats = d['features'].clone()
-        cp = d['cp'].clone()
+        feats = d['features'].clone()  # [N, 6]
+        cp = d['cp'].clone()           # [N, 1]
+
+        # Load the 16 geometric parameters if available
+        if 'params' in d:
+            params = d['params'].clone()   # shape: (16,)
+        else:
+            params = torch.zeros(16)       # fallback for old processed files
 
         if self.augment:
+            # Jitter coords slightly (simulate mesh variation)
             feats[:, :3] += torch.randn_like(feats[:, :3]) * 0.02
+            # Jitter normals
             feats[:, 3:] += torch.randn_like(feats[:, 3:]) * 0.05
             feats[:, 3:] = feats[:, 3:] / (feats[:, 3:].norm(dim=1, keepdim=True) + 1e-8)
+            # Random point dropout (keep 80-100%)
             if torch.rand(1) > 0.5:
                 keep = int(feats.shape[0] * np.random.uniform(0.8, 1.0))
                 perm = torch.randperm(feats.shape[0])[:keep]
                 feats = feats[perm]
                 cp = cp[perm]
 
-        return feats, cp
+        return feats, cp, params
 
-# ============================================================
-# VERY VERBOSE Collate function
-# ============================================================
 def collate_fn(batch):
+    max_n = max(b[0].shape[0] for b in batch)
+    feats_padded, cp_padded, masks, params = [], [], [], []
 
-    # Print point counts of every sample in this batch
-    ns = [b[0].shape[0] for b in batch]
-
-    max_n = max(ns)
-
-    feats_padded, cp_padded, masks = [], [], []
-
-    for i, (f, c) in enumerate(batch):
+    for f, c, p in batch:
         n = f.shape[0]
         pad_len = max_n - n
-
         if pad_len > 0:
             f = torch.cat([f, torch.zeros(pad_len, f.shape[1])], dim=0)
             c = torch.cat([c, torch.zeros(pad_len, 1)], dim=0)
@@ -68,32 +65,44 @@ def collate_fn(batch):
         feats_padded.append(f)
         cp_padded.append(c)
         masks.append(mask)
+        params.append(p)
 
-    stacked_feats = torch.stack(feats_padded)
+    return (
+        torch.stack(feats_padded),
+        torch.stack(cp_padded),
+        torch.stack(masks),
+        torch.stack(params)          # [B, 16]
+    )
 
-    return stacked_feats, torch.stack(cp_padded), torch.stack(masks)
-
-# ============================================================
-# Training / Evaluation loops
-# ============================================================
 def train_one_epoch(model, loader, optimizer, criterion, device):
     model.train()
     total_loss = 0
-    print("[train_one_epoch] Starting epoch training loop...")
+    for batch in loader:
+        # Support both (feats, cp, masks) and (feats, cp, masks, params)
+        if len(batch) == 4:
+            feats, cp, masks, params = batch
+            params = params.to(device)
+        else:
+            feats, cp, masks = batch
+            params = None
 
-    pbar = tqdm(loader, desc="  Training batches", leave=False)
-
-    for batch_idx, (feats, cp, masks) in enumerate(pbar):
         feats, cp, masks = feats.to(device), cp.to(device), masks.to(device)
-        pred = model(feats)
-        loss = criterion(pred * masks.unsqueeze(-1), cp * masks.unsqueeze(-1))
 
+        # Call model with or without params
+        if params is not None:
+            try:
+                pred = model(feats, params)
+            except TypeError:
+                # Fallback if model doesn't accept params
+                pred = model(feats)
+        else:
+            pred = model(feats)
+
+        loss = criterion(pred * masks.unsqueeze(-1), cp * masks.unsqueeze(-1))
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
-
         total_loss += loss.item() * feats.size(0)
-        pbar.set_postfix(loss=f"{loss.item():.4f}")
 
     return total_loss / len(loader.dataset)
 
@@ -101,24 +110,47 @@ def train_one_epoch(model, loader, optimizer, criterion, device):
 def eval_one_epoch(model, loader, criterion, device):
     model.eval()
     total_loss = 0
-    pbar = tqdm(loader, desc="  Validation batches", leave=False)
-    for feats, cp, masks in pbar:
+    for batch in loader:
+        if len(batch) == 4:
+            feats, cp, masks, params = batch
+            params = params.to(device)
+        else:
+            feats, cp, masks = batch
+            params = None
+
         feats, cp, masks = feats.to(device), cp.to(device), masks.to(device)
-        pred = model(feats)
+
+        if params is not None:
+            try:
+                pred = model(feats, params)
+            except TypeError:
+                pred = model(feats)
+        else:
+            pred = model(feats)
+
         loss = criterion(pred * masks.unsqueeze(-1), cp * masks.unsqueeze(-1))
         total_loss += loss.item() * feats.size(0)
-    return total_loss / len(loader.dataset)
 
+    return total_loss / len(loader.dataset)
 # ============================================================
 # Main
 # ============================================================
 def main():
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description="Train DrivAer Cp Surrogate Models")
+    
+    # Model selection
+    parser.add_argument('--model', type=str, default='pointnet_with_params',
+                        choices=list(MODEL_REGISTRY.keys()),
+                        help='Model architecture to train')
+    
+    # Training parameters
     parser.add_argument('--processed_dir', type=str, default='./references/processed')
     parser.add_argument('--epochs', type=int, default=150)
     parser.add_argument('--batch_size', type=int, default=2)
     parser.add_argument('--lr', type=float, default=1e-3)
+    parser.add_argument('--hidden', type=int, default=128)
     parser.add_argument('--device', type=str, default='cuda' if torch.cuda.is_available() else 'cpu')
+    
     args = parser.parse_args()
 
     device = torch.device(args.device)
@@ -126,9 +158,11 @@ def main():
     print("TRAINING CONFIGURATION")
     print("=" * 60)
     print(f"Device: {device}")
+    print(f"Model: {args.model}")
     print(f"Epochs: {args.epochs}")
     print(f"Batch size: {args.batch_size}")
     print(f"Learning rate: {args.lr}")
+    print(f"Hidden size: {args.hidden}")
 
     all_runs = ['run_80','run_98','run_102','run_208','run_213','run_281','run_397','run_425','run_445','run_474']
     train_runs = all_runs[:8]
@@ -143,17 +177,22 @@ def main():
     print(f"  Train samples: {len(train_ds)}")
     print(f"  Val samples:   {len(val_ds)}")
 
-    sample_feats, sample_cp = train_ds[0]
+    sample_feats, sample_cp, sample_params = train_ds[0]
     print(f"\n[2/4] Sample inspection:")
     print(f"  features shape: {sample_feats.shape}")
     print(f"  cp shape:       {sample_cp.shape}")
+    print(f"  params shape:   {sample_params.shape}")
 
     print("\n[3/4] Creating dataloaders...")
     train_loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True, collate_fn=collate_fn)
     val_loader = DataLoader(val_ds, batch_size=1, shuffle=False, collate_fn=collate_fn)
 
     print("\n[4/4] Building model...")
-    model = PointNetCpRegressor(input_dim=6, hidden=128).to(device)
+    
+    # Use the model factory
+    model = get_model(args.model, hidden=args.hidden).to(device)
+    print(f"  Created model: {args.model}")
+
     total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f"  Total trainable parameters: {total_params:,}")
 
@@ -177,7 +216,11 @@ def main():
 
         if val_loss < best_val:
             best_val = val_loss
-            torch.save({'model_state': model.state_dict(), 'epoch': epoch}, './output/best_model.pt')
+            torch.save({
+                'model_state': model.state_dict(),
+                'epoch': epoch,
+                'model_name': args.model
+            }, './output/best_model.pt')
             print("  ✓ Saved new best model")
 
     print("\n" + "=" * 60)

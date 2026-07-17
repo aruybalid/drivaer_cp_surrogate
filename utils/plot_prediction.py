@@ -19,8 +19,10 @@ def plot_prediction(vtp_path: str, show_relative: bool = True):
     if 'pred_Cp' in mesh.cell_data and 'GT_Cp' in mesh.cell_data:
         pred = mesh.cell_data['pred_Cp']
         gt = mesh.cell_data['GT_Cp']
-        rel_error = np.abs(pred - gt) / (np.abs(gt) + 1e-8)
+        rel_error = np.log10(np.abs(pred - gt) / (np.abs(gt) + 1e-12))
+        error = np.log10(np.abs(pred - gt) + 1e-12)
         mesh.cell_data['rel_error'] = rel_error
+        mesh.cell_data['error'] = error
         print(f"Relative error computed. Mean = {rel_error.mean():.4f}")
 
     # Choose which scalars to show
@@ -46,7 +48,7 @@ def plot_prediction(vtp_path: str, show_relative: bool = True):
         plotter.subplot(0, i)
         clim = [-1.2, 1.2]
         if name in ['error', 'rel_error']:
-            clim = (0, mesh.cell_data[name].max())
+            clim = (-2, 0)
         cmap = "coolwarm" if name in ['pred_Cp', 'GT_Cp'] else "magma"
 
         plotter.add_mesh(

@@ -86,5 +86,3 @@ Expect: directional correctness (not noise/constant). Visualize in Paraview: CpM
 - No PhysicsNeMo/GLOBE: faster to implement/train on CPU; GLOBE excellent for production (equivariant, discretization invariant) but heavier setup.
 - Small data: augmentation + early stopping key; shows idea works.
 - Web app: focused on customer experience (intuitive, visual, actionable diagnostics) over fancy hosting.
-
-Ready for demo. Good luck! (Tailored to Rescale-style engineering AI role.)

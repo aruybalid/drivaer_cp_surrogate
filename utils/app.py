@@ -1,9 +1,8 @@
 """
 Streamlit Web App for DrivAer Cp Inference.
-- Shows basic info about the uploaded file immediately
-- Shows rotating training images while inference runs (decimation is slow)
-- Accepts uploaded model (.pt)
-- Tab 2 shows: Predicted Cp + Ground Truth Cp + Absolute Error
+- Model is selected only via the dropdown menu
+- Shows rotating training images while inference runs
+- Tab 2 shows: Predicted Cp + Ground Truth Cp + Absolute Error (log scale)
 """
 
 import streamlit as st
@@ -14,6 +13,7 @@ from pathlib import Path
 import tempfile
 import time
 from inference import predict_cp
+from model_factory import MODEL_REGISTRY
 
 st.set_page_config(page_title="DrivAer Cp Surrogate", layout="wide")
 st.title("🚗 DrivAer Surface Cp Predictor")
@@ -38,10 +38,20 @@ with st.sidebar:
     uploaded_model = st.file_uploader("Upload trained model (.pt)", type=['pt'])
     uploaded_vtp = st.file_uploader("Upload geometry (.vtp)", type=['vtp'])
 
-    target_faces = st.slider("Decimation target faces", 10000, 100000, 500000, step=10000)
+    target_faces = st.slider("Decimation target faces", 10000, 100000, 500000, step=5000)
 
-    can_run = uploaded_model is not None and uploaded_vtp is not None
-    run_inference = st.button("▶ Run Inference", type="primary", disabled=not can_run)
+    # === Model Selection (only from dropdown) ===
+    st.header("Model Architecture")
+    model_options = list(MODEL_REGISTRY.keys())
+
+    selected_model = st.selectbox(
+        "Choose model",
+        options=model_options,
+        index=model_options.index("mlp_no_global")   # default
+    )
+
+    can_run = uploaded_model is not None and (uploaded_vtp is not None)
+    run_btn = st.button("▶ Run Inference", type="primary", disabled=not can_run)
 
 # ============================================================
 # Load raw mesh metadata only
@@ -78,9 +88,9 @@ with tab1:
         st.info("Upload a .vtp file or click the demo button.")
 
 # ============================================================
-# Run Inference with Image Carousel (No Threading)
+# Run Inference with Image Carousel
 # ============================================================
-if run_inference and uploaded_model:
+if run_btn and uploaded_model:
     t0 = time.time()
 
     # Save uploaded model temporarily
@@ -100,18 +110,24 @@ if run_inference and uploaded_model:
 
     if example_images:
         status_text.info("Running decimation + inference... This can take several minutes.")
-        for i, img_path in enumerate(example_images * 2):   # loop multiple times
-            progress_placeholder.image(str(img_path), width='content',
-                                       caption=f"Training Example {i % len(example_images) + 1}")
+        for i, img_path in enumerate(example_images * 2):
+            progress_placeholder.image(
+                str(img_path),
+                width='content',
+                caption=f"Training Example {i % len(example_images) + 1}"
+            )
             time.sleep(1.0)
     else:
         status_text.info("Running decimation + inference... Please wait.")
-        for _ in range(10):
-            time.sleep(2.0)
+        for _ in range(30):
+            time.sleep(1.0)
 
-    # Actual inference
+    # Run inference using the model from the dropdown
     processed_mesh, raw_data = predict_cp(
-        vtp_path, model_path=model_path, target_faces=target_faces
+        vtp_path=vtp_path,
+        model_path=model_path,
+        target_faces=target_faces,
+        model_name=selected_model
     )
 
     # Cleanup
@@ -126,7 +142,7 @@ if run_inference and uploaded_model:
     st.success(f"Inference complete in {st.session_state.infer_time:.2f}s")
 
 # ============================================================
-# Tab 2: Predicted Cp + Ground Truth + Absolute Error
+# Tab 2: Predicted Cp + Ground Truth + Absolute Error (log scale)
 # ============================================================
 with tab2:
     st.subheader("Predicted vs Ground Truth Cp Field")
@@ -135,6 +151,19 @@ with tab2:
     if processed is not None and 'pred_Cp' in processed.cell_data:
         has_gt = 'GT_Cp' in processed.cell_data
         centers = processed.cell_centers().points
+        n_points = len(centers)
+
+        # Adaptive marker size
+        if n_points > 300_000:
+            marker_size = 0.6
+        elif n_points > 200_000:
+            marker_size = 0.8
+        elif n_points > 100_000:
+            marker_size = 1.2
+        elif n_points > 50_000:
+            marker_size = 1.6
+        else:
+            marker_size = 2.2
 
         if has_gt:
             col1, col2 = st.columns(2)
@@ -144,7 +173,7 @@ with tab2:
                 fig1 = go.Figure(data=[go.Scatter3d(
                     x=centers[:, 0], y=centers[:, 1], z=centers[:, 2],
                     mode='markers',
-                    marker=dict(size=2, color=processed.cell_data['pred_Cp'],
+                    marker=dict(size=marker_size, color=processed.cell_data['pred_Cp'],
                                 colorscale='RdBu_r', cmin=-1.2, cmax=1.2,
                                 colorbar=dict(title="Cp")),
                 )])
@@ -156,57 +185,56 @@ with tab2:
                 fig2 = go.Figure(data=[go.Scatter3d(
                     x=centers[:, 0], y=centers[:, 1], z=centers[:, 2],
                     mode='markers',
-                    marker=dict(size=2, color=processed.cell_data['GT_Cp'],
+                    marker=dict(size=marker_size, color=processed.cell_data['GT_Cp'],
                                 colorscale='RdBu_r', cmin=-1.2, cmax=1.2,
                                 colorbar=dict(title="Cp")),
                 )])
                 fig2.update_layout(scene=dict(aspectmode='data'), height=500)
                 st.plotly_chart(fig2, width='content')
 
-            # Absolute Error
+            # Absolute Error (log scale)
+            st.markdown("**Absolute Error (log scale)**")
+            error = processed.cell_data['error']
+            log_error = np.log10(error + 1e-8)
 
-            # Explicit inferno scale that always starts at black when cmin=0
-            inferno_scale = [
-                [0.0, 'rgb(0, 0, 0)'],      # black
-                [0.2, 'rgb(40, 11, 84)'],
-                [0.4, 'rgb(101, 21, 110)'],
-                [0.6, 'rgb(159, 42, 99)'],
-                [0.8, 'rgb(212, 80, 60)'],
-                [1.0, 'rgb(255, 165, 0)']   # bright yellow/orange
-                ]
-            st.markdown("**Absolute Error**")
-            error = np.log10(processed.cell_data['error'] + 1e-12)  # log scale for better visualization
-            
-            # Define where the ticks should appear (in log space)
-            tickvals = [-2, -1.5, -1, -0.5, 0]
-            # Define what the user actually sees
-            ticktext = ['0.01', '0.032', '0.1', '0.32', '1.0']
+            inferno_explicit = [
+                [0.00, 'rgb(0, 0, 4)'],
+                [0.05, 'rgb(31, 12, 72)'],
+                [0.15, 'rgb(85, 15, 109)'],
+                [0.30, 'rgb(139, 35, 108)'],
+                [0.50, 'rgb(190, 60, 91)'],
+                [0.70, 'rgb(230, 106, 58)'],
+                [0.90, 'rgb(249, 175, 60)'],
+                [1.00, 'rgb(252, 254, 164)']
+            ]
+
+            tickvals = [-2, -1.7, -1.3, -1, -0.7, -0.3, 0]
+            ticktext = ['0.01', '0.02', '0.05', '0.1', '0.2', '0.5', '1.0']
 
             fig_err = go.Figure(data=[go.Scatter3d(
                 x=centers[:, 0], y=centers[:, 1], z=centers[:, 2],
                 mode='markers',
-                marker=dict(size=2, color=error, colorscale=inferno_scale,
-                            cmin=-2, cmax=0, colorbar=dict(title="log10(|Error|)",
-                            tickvals=tickvals, ticktext=ticktext)),
+                marker=dict(size=marker_size, color=log_error,
+                            colorscale=inferno_explicit, cmin=-2, cmax=0,
+                            colorbar=dict(title="|Error|", tickvals=tickvals, ticktext=ticktext)),
             )])
             fig_err.update_layout(scene=dict(aspectmode='data'), height=500)
             st.plotly_chart(fig_err, width='content')
 
-            # Metrics
             col1, col2, col3 = st.columns(3)
             with col1:
-                st.metric("Mean Absolute Error", f"{(10**error - 1e-12).mean():.4f}")
+                st.metric("Mean Absolute Error", f"{error.mean():.4f}")
             with col2:
-                st.metric("Max Absolute Error", f"{(10**error - 1e-12).max():.4f}")
+                st.metric("Max Absolute Error", f"{error.max():.4f}")
             with col3:
-                st.metric("Median Absolute Error", f"{np.median(10**error - 1e-12):.4f}")
+                st.metric("Median Absolute Error", f"{np.median(error):.4f}")
 
         else:
             st.markdown("**Predicted Cp**")
             fig = go.Figure(data=[go.Scatter3d(
                 x=centers[:, 0], y=centers[:, 1], z=centers[:, 2],
                 mode='markers',
-                marker=dict(size=2, color=processed.cell_data['pred_Cp'],
+                marker=dict(size=marker_size, color=processed.cell_data['pred_Cp'],
                             colorscale='RdBu_r', cmin=-1.2, cmax=1.2,
                             colorbar=dict(title="Cp")),
             )])

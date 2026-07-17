@@ -11,24 +11,26 @@ Preprocessing pipeline for DrivAerML boundary_i.vtp files.
 
 import pyvista as pv
 import numpy as np
-import torch
+import torch, pandas as pd
 from pathlib import Path
 import argparse
 from tqdm import tqdm
 from scipy.spatial import cKDTree
 
 def process_vtp(vtp_path: Path, target_faces: int = 5000, use_cell_centers: bool = True):
-    print(f"  [1/7] Reading mesh: {vtp_path.name}")
+    print(f"  [1/8] Reading mesh: {vtp_path.name}")
     mesh = pv.read(str(vtp_path))
     print(f"        -> Original: {mesh.n_points} points, {mesh.n_faces} faces")
 
     # Check for CpMeanTrim early
     cp = mesh.cell_data.get("CpMeanTrim", mesh.point_data.get("CpMeanTrim", None))
     if cp is None:
-        raise IOError("        -> WARNING: CpMeanTrim not found in original mesh.")
+        print("        -> WARNING: CpMeanTrim not found in original mesh.")
+    else:
+        print("        -> CpMeanTrim found in original mesh.")
 
     # Ensure triangulated surface
-    print(f"  [2/7] Checking triangulation (is_all_triangles={mesh.is_all_triangles})")
+    print(f"  [2/8] Checking triangulation (is_all_triangles={mesh.is_all_triangles})")
     if not mesh.is_all_triangles:
         print("        -> Triangulating...")
         mesh = mesh.triangulate()
@@ -36,45 +38,37 @@ def process_vtp(vtp_path: Path, target_faces: int = 5000, use_cell_centers: bool
     else:
         print("        -> Already triangulated, skipping.")
 
-    # Decimate + transfer CpMeanTrim via nearest-neighbor lookup on cell centers
-    print(f"  [3/7] Decimation check (target_faces={target_faces})")
+    # Decimate + transfer CpMeanTrim via nearest-neighbor lookup
+    print(f"  [3/8] Decimation check (target_faces={target_faces})")
     if mesh.n_faces > target_faces:
         reduction = 1 - target_faces / mesh.n_faces
         print(f"        -> Decimating with target_reduction={reduction:.3f}")
         decimated = mesh.decimate(target_reduction=reduction, volume_preservation=True)
         print(f"        -> After decimation: {decimated.n_faces} faces")
 
-        # Transfer CpMeanTrim using nearest cell center lookup (more reliable than interpolate)
-        print("        -> Transferring CpMeanTrim via nearest-neighbor lookup on cell centers...")
+        # Transfer CpMeanTrim using nearest-neighbor lookup
+        print("        -> Transferring CpMeanTrim via nearest-neighbor lookup...")
         if 'CpMeanTrim' in mesh.cell_data:
             orig_centers = mesh.cell_centers().points
             dec_centers = decimated.cell_centers().points
             tree = cKDTree(orig_centers)
             _, idx = tree.query(dec_centers, k=1)
             decimated.cell_data['CpMeanTrim'] = mesh.cell_data['CpMeanTrim'][idx]
-            print("        -> CpMeanTrim transferred successfully (cell data).")
-        else:
-            print("        -> WARNING: CpMeanTrim not found as cell_data. Trying point_data...")
-            if 'CpMeanTrim' in mesh.point_data:
-                # Fallback: interpolate from point data if needed
-                decimated = decimated.interpolate(mesh)
-                print("        -> CpMeanTrim transferred via point_data interpolation.")
-
+            print("        -> CpMeanTrim transferred successfully.")
         mesh = decimated
-        print(f"        -> Final mesh after transfer: {mesh.n_points} points, {mesh.n_faces} faces")
     else:
         print("        -> No decimation needed.")
 
     # Verify CpMeanTrim survived
     cp = mesh.cell_data.get("CpMeanTrim", mesh.point_data.get("CpMeanTrim", None))
     if cp is None:
-        raise IOError("        -> WARNING: CpMeanTrim lost after processing. Using zeros.")
+        print("        -> WARNING: CpMeanTrim lost after processing. Using zeros.")
         cp = np.zeros(mesh.n_cells if use_cell_centers else mesh.n_points)
     else:
         print("        -> CpMeanTrim successfully preserved.")
 
     # Get points and normals
-    print(f"  [4/7] Extracting centers/normals (use_cell_centers={use_cell_centers})")
+    print(f"  [4/8] Extracting centers/normals (use_cell_centers={use_cell_centers})")
     if use_cell_centers:
         centers = mesh.cell_centers().points
         mesh.compute_normals(point_normals=False, cell_normals=True, inplace=True)
@@ -89,15 +83,30 @@ def process_vtp(vtp_path: Path, target_faces: int = 5000, use_cell_centers: bool
     print(f"        -> Extracted {len(centers)} centers, Cp shape: {cp.shape}")
 
     # Local normalization
-    print(f"  [5/7] Normalizing coordinates")
+    print(f"  [5/8] Normalizing coordinates")
     coords_mean = centers.mean(axis=0)
     coords_std = centers.std(axis=0) + 1e-8
     coords_norm = (centers - coords_mean) / coords_std
     normals = normals / (np.linalg.norm(normals, axis=1, keepdims=True) + 1e-8)
     print(f"        -> coords_mean={coords_mean}, coords_std={coords_std}")
 
+    # Load geometric parameters (16 values)
+    print(f"  [6/8] Loading geometric parameters")
+    params = None
+    try:
+        run_id = vtp_path.parent.name.split("_")[1]
+        csv_path = vtp_path.parent / f"geo_parameters_{run_id}.csv"
+        if csv_path.exists():
+            geo_df = pd.read_csv(csv_path)
+            params = torch.tensor(geo_df.iloc[0].values.astype(np.float32))
+            print(f"        -> Loaded {len(params)} geometric parameters")
+        else:
+            print(f"        -> WARNING: {csv_path} not found. params will be None.")
+    except Exception as e:
+        print(f"        -> WARNING: Failed to load parameters ({e})")
+
     # Build data dict
-    print(f"  [6/7] Building data dictionary and converting to torch tensors")
+    print(f"  [7/8] Building data dictionary and converting to torch tensors")
     data = {
         'coords': torch.tensor(coords_norm, dtype=torch.float32),
         'normals': torch.tensor(normals, dtype=torch.float32),
@@ -108,8 +117,13 @@ def process_vtp(vtp_path: Path, target_faces: int = 5000, use_cell_centers: bool
         'n_points': len(centers),
         'source_file': str(vtp_path)
     }
+
+    if params is not None:
+        data['params'] = params
+
     data['features'] = torch.cat([data['coords'], data['normals']], dim=1)
-    print(f"  [7/7] Done processing {vtp_path.name}")
+    print(f"  [8/8] Done processing {vtp_path.name}")
+
     return data
 
 def main():
