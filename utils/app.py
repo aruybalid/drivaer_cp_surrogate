@@ -270,7 +270,7 @@ with tab3:
             st.plotly_chart(error_hist, width='content')
 
         if st.button("Export predicted .vtp"):
-            out_path = "predicted_output.vtp"
+            out_path = "./output/predicted_output.vtp"
             processed.save(out_path)
             with open(out_path, "rb") as f:
                 st.download_button("Download predicted.vtp", f, file_name="predicted_Cp.vtp")
