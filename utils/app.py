@@ -16,7 +16,7 @@ from inference import predict_cp
 from model_factory import MODEL_REGISTRY
 
 st.set_page_config(page_title="DrivAer Cp Surrogate", layout="wide")
-st.title("🚗 DrivAer Surface Cp Predictor")
+st.title("🚗 DrivAer Surface Pressure Coefficient Predictor")
 st.caption("Upload a trained model (.pt) + geometry (.vtp) → Run inference")
 
 # ============================================================

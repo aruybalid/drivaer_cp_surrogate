@@ -7,3 +7,4 @@ streamlit
 huggingface_hub
 scikit-learn  # for optional normalization helpers
 tqdm
+pandas
