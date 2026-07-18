@@ -155,9 +155,9 @@ with tab2:
 
         # Adaptive marker size
         if n_points > 300_000:
-            marker_size = 0.6
+            marker_size = 2.0
         elif n_points > 200_000:
-            marker_size = 0.8
+            marker_size = 1.0
         elif n_points > 100_000:
             marker_size = 1.2
         elif n_points > 50_000:
