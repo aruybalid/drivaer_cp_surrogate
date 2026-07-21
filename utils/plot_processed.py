@@ -12,7 +12,7 @@ import pyvista as pv
 from pathlib import Path
 import argparse
 
-PROCESSED_DIR = Path("../1_Data_Processing/output/processed")
+PROCESSED_DIR = Path("./references/processed")
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--dataset", type=int, default=None,

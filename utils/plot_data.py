@@ -147,9 +147,9 @@ if args.global_plots:
     # ============================================================
     # 4. Choose two most impactful geo-parameters
     # ============================================================
-    possible_params = ["Vehicle_Ride_Height", "Rear_Diffusor_Angle",
-                       "Vehicle_Length", "Vehicle_Width", "Vehicle_Height",
-                       "Hood_Angle", "Windscreen_Angle", "Backlight_Angle"]
+    possible_params = [" Vehicle_Ride_Height", " Rear_Diffusor_Angle",
+                       " Vehicle_Length", " Vehicle_Width", " Vehicle_Height",
+                       " Hood_Angle", " Windscreen_Angle", " Backlight_Angle"]
 
     param1 = next((p for p in possible_params if p in df.columns), None)
     param2 = next((p for p in possible_params if p in df.columns and p != param1), None)

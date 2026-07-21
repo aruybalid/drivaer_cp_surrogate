@@ -74,11 +74,11 @@ def collate_fn(batch):
         torch.stack(params)          # [B, 16]
     )
 
-def train_one_epoch(model, loader, optimizer, criterion, device):
+def train_one_epoch(model, loader, optimizer, criterion, device, model_name):
     model.train()
     total_loss = 0
+
     for batch in loader:
-        # Support both (feats, cp, masks) and (feats, cp, masks, params)
         if len(batch) == 4:
             feats, cp, masks, params = batch
             params = params.to(device)
@@ -88,13 +88,9 @@ def train_one_epoch(model, loader, optimizer, criterion, device):
 
         feats, cp, masks = feats.to(device), cp.to(device), masks.to(device)
 
-        # Call model with or without params
-        if params is not None:
-            try:
-                pred = model(feats, params)
-            except TypeError:
-                # Fallback if model doesn't accept params
-                pred = model(feats)
+        # Only pass params if the model actually needs them
+        if model_name in MODELS_WITH_PARAMS:
+            pred = model(feats, params)
         else:
             pred = model(feats)
 
@@ -107,9 +103,10 @@ def train_one_epoch(model, loader, optimizer, criterion, device):
     return total_loss / len(loader.dataset)
 
 @torch.no_grad()
-def eval_one_epoch(model, loader, criterion, device):
+def eval_one_epoch(model, loader, criterion, device, model_name):
     model.eval()
     total_loss = 0
+
     for batch in loader:
         if len(batch) == 4:
             feats, cp, masks, params = batch
@@ -120,11 +117,8 @@ def eval_one_epoch(model, loader, criterion, device):
 
         feats, cp, masks = feats.to(device), cp.to(device), masks.to(device)
 
-        if params is not None:
-            try:
-                pred = model(feats, params)
-            except TypeError:
-                pred = model(feats)
+        if model_name in MODELS_WITH_PARAMS:
+            pred = model(feats, params)
         else:
             pred = model(feats)
 
@@ -132,6 +126,7 @@ def eval_one_epoch(model, loader, criterion, device):
         total_loss += loss.item() * feats.size(0)
 
     return total_loss / len(loader.dataset)
+
 # ============================================================
 # Main
 # ============================================================
@@ -164,7 +159,8 @@ def main():
     print(f"Learning rate: {args.lr}")
     print(f"Hidden size: {args.hidden}")
 
-    all_runs = ['run_80','run_98','run_102','run_208','run_213','run_281','run_397','run_425','run_445','run_474']
+    # all_runs = ['run_80','run_98','run_102','run_208','run_213','run_281','run_397','run_425','run_445','run_474']
+    all_runs = ['run_80','run_98','run_102','run_213','run_281','run_397','run_425','run_445','run_474'] # exclude run_208 from all runs due to extreme outliers
     train_runs = all_runs[:8]
     val_runs = all_runs[8:]
 
@@ -208,8 +204,10 @@ def main():
         epoch_start = time.time()
         print(f"\n--- Epoch {epoch+1}/{args.epochs} ---")
 
-        train_loss = train_one_epoch(model, train_loader, optimizer, criterion, device)
-        val_loss = eval_one_epoch(model, val_loader, criterion, device)
+        # train_loss = train_one_epoch(model, train_loader, optimizer, criterion, device)
+        # val_loss = eval_one_epoch(model, val_loader, criterion, device)
+        train_loss = train_one_epoch(model, train_loader, optimizer, criterion, device, args.model)
+        val_loss   = eval_one_epoch(model, val_loader, criterion, device, args.model)
 
         epoch_time = time.time() - epoch_start
         print(f"Epoch {epoch+1:03d} | train_loss={train_loss:.4f} | val_loss={val_loss:.4f} | time={epoch_time:.1f}s")

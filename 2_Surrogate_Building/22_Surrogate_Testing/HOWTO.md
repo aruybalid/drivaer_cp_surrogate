@@ -7,7 +7,7 @@
 ## How to Run
 Make sure the model and the test data are in `./references`.
 ```bash
-python ../../utils/inference.py --vtp_path ./references/data/run_1/boundary_1.vtp --out ./output/predicted_PointNet.vtp --model_path ./references/best_model_PointNet.pt --model pointnet --target_faces=10000000000
+python ../../utils/inference.py --vtp_path ./references/data/run_1/boundary_1.vtp --out ./output/predicted_MLPng_heldout_run_208.vtp --model_path ./references/MLPng_heldout_run_208.pt --model mlp_no_global --target_faces=10000000000
 python ../../utils/plot_prediction.py --vtp ./output/predicted_decimated-5000_hl-128_run_2.vtp
 ```
 

@@ -8,9 +8,9 @@ Move the `processed` data from the previous `output` folder to this stages `refe
 
 ```bash
 python ../../utils/train.py --model pointnet
-python train.py --model mlp_no_global --epochs 100
-python train.py --model mlp_with_params --hidden 256
-python train.py --model pointnet_with_params --batch_size 4
+python ../../utils/train.py --model mlp_no_global --epochs 100
+python ../../utils/train.py --model mlp_with_params --hidden 256
+python ../../utils/train.py --model pointnet_with_params --batch_size 4
 ```
 
 Batch size, step size and number of epochs are provided as arguments.
