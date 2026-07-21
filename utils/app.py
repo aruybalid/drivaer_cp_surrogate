@@ -38,17 +38,27 @@ with st.sidebar:
     uploaded_model = st.file_uploader("Upload trained model (.pt)", type=['pt'])
     uploaded_vtp = st.file_uploader("Upload geometry (.vtp)", type=['vtp'])
 
-    target_faces = st.slider("Decimation target faces", 10000, 100000, 500000, step=5000)
+    target_faces = st.slider("Decimation target faces", 5000, 10000, 500000, step=5000)
 
-    # === Model Selection (only from dropdown) ===
+    # === Model Selection ===
     st.header("Model Architecture")
     model_options = list(MODEL_REGISTRY.keys())
 
     selected_model = st.selectbox(
         "Choose model",
         options=model_options,
-        index=model_options.index("mlp_no_global")   # default
+        index=model_options.index("mlp_no_global")
     )
+
+    # === Clear previous results if model changes ===
+    if 'last_model' not in st.session_state:
+        st.session_state.last_model = selected_model
+
+    if selected_model != st.session_state.last_model:
+        # User changed the model → clear old inference results
+        st.session_state.processed_mesh = None
+        st.session_state.infer_time = None
+        st.session_state.last_model = selected_model
 
     can_run = uploaded_model is not None and (uploaded_vtp is not None)
     run_btn = st.button("▶ Run Inference", type="primary", disabled=not can_run)
@@ -66,6 +76,9 @@ def load_raw_mesh_from_upload(uploaded_file):
 
 if uploaded_vtp and st.session_state.raw_mesh is None:
     st.session_state.raw_mesh = load_raw_mesh_from_upload(uploaded_vtp)
+    # Clear previous inference results when a new file is uploaded
+    st.session_state.processed_mesh = None
+    st.session_state.infer_time = None
 
 # ============================================================
 # Tabs
