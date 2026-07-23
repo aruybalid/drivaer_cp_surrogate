@@ -141,7 +141,7 @@ def main():
     # Training parameters
     parser.add_argument('--processed_dir', type=str, default='./references/processed')
     parser.add_argument('--epochs', type=int, default=150)
-    parser.add_argument('--batch_size', type=int, default=2)
+    parser.add_argument('--batch_size', type=int, default=8)
     parser.add_argument('--lr', type=float, default=1e-3)
     parser.add_argument('--hidden', type=int, default=128)
     parser.add_argument('--device', type=str, default='cuda' if torch.cuda.is_available() else 'cpu')

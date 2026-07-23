@@ -55,7 +55,7 @@ def predict_cp(vtp_path, model_path, target_faces=5000, model_name='pointnet', p
 
         pred = pred.squeeze(0).cpu().numpy().flatten()
         print("Prediction complete.")
-        
+
     # Build output mesh from the processed data
     points = data['original_points'].numpy()
     mesh = pv.PolyData(points)

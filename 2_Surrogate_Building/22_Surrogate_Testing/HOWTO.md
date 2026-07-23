@@ -1,7 +1,7 @@
 ## 2.2 Surrogate Testing
 
 ## What the Stage Does
-1. runs inference on the trained model, using unseen surface geometries.
+1. Runs inference on the trained model, using unseen surface geometries.
 2. Plot the results in an interactive plot.
 
 ## How to Run
@@ -14,3 +14,4 @@ python ../../utils/plot_prediction.py --vtp ./output/predicted_decimated-5000_hl
 Make sure to use a unique name for the output (vtp)
 
 ## Human Review
+Human reviews the model in `./output` before continuing to the next step.

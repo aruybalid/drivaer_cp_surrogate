@@ -1,17 +1,108 @@
-# DrivAer Cp Surrogate - Physics-ML Take-Home
+# DrivAer Cp Physics-ML Surrogate
 
 Practical end-to-end solution for Surface-Only Aerodynamics ML + Inference Web App.
 
-**Core Idea**: Decimate surface meshes from boundary_i.vtp to ~5k points. Use PointNet-style point cloud regressor (pure PyTorch) taking normalized coords + normals to predict CpMeanTrim per point. Captures local geometry + global shape context. Trains fast on laptop CPU/GPU. Produces directionally correct fields (stagnation, acceleration zones) on held-out meshes.
+**Core Idea**: Decimate surface meshes from boundary_i.vtp to ~5k points. Use a point cloud-based regressor of different forms (pure PyTorch, e.g., MLP, PointNet), taking normalized coords + normals to predict CpMeanTrim per point. Captures local geometry + global shape context. Trains fast on laptop CPU/GPU. Produces directionally correct fields (stagnation, acceleration zones) on held-out meshes.
 
 **Why this approach**:
 - Only surface geometry (points, normals derived from vtp).
 - Practical: decimation + lightweight model fits 1-week scope + limited resources.
 - Physics-ML flavor: respects mesh geometry via point cloud + normals; equivariant-ish via normalization.
-- Better than pure MLP (global context via PointNet pooling); simpler than full GNN/PhysicsNeMo GLOBE for quick execution.
+- Better than pure MLP (global context via PointNet pooling); simpler than full GNN/PhysicsNeMo for quick execution.
 - Absolute accuracy secondary; focus on learning non-trivial mapping.
 
-## Setup (one-time)
+---
+
+## Project Structure (Stepwise Workflow)
+
+This project is organized into three sequential stages. Each stage has its own folder containing a `HOWTO.md` file that describes what the stage does and how to run it.
+
+| Stage | Folder                        | Purpose                                      | Key Script(s)                     |
+|-------|-------------------------------|----------------------------------------------|-----------------------------------|
+| 1     | `1_Data_Processing/`          | Load, inspect, decimate and store data       | `plot_data.py`, `preprocess.py`, `plot_processed.py` |
+| 2     | `2_Surrogate_Building/`       | Train surrogate models and run inference     | `train.py`, `inference.py`        |
+| 3     | `3_Deploy/`                   | Launch the interactive Streamlit web app     | `app.py`                          |
+
+**Important**: Complete the stages in order. Human review is expected between stages (especially after Stage 1).
+
+---
+
+## Stage 1: Data Processing
+
+**Location**: `1_Data_Processing/`
+
+**What it does**:
+- Plot the raw surface data from the `./references` folder.
+- Preprocess (decimate + select variables such as `CpMeanTrim`).
+- Store the processed data in `./output/processed`.
+- Plot the processed data for human review.
+
+**How to run**:
+```bash
+cd 1_Data_Processing
+python ../utils/plot_data.py
+python ../utils/preprocess.py --target_faces 5000
+python ../utils/plot_processed.py
+```
+
+Human review of the processed data in `./output/processed` is required before moving to Stage 2.
+
+---
+
+## Stage 2: Surrogate Building
+
+**Location**: `2_Surrogate_Building/`
+
+This stage contains two sub-steps:
+
+### 2.1 Surrogate Training (`21_Surrogate_Training/`)
+- Trains different model architectures (PointNet, MLP variants, with or without geometric parameters) on the preprocessed data.
+- Models are defined in `../utils/model.py`.
+
+**How to run**:
+```bash
+cd 2_Surrogate_Building/21_Surrogate_Training
+python ../../utils/train.py --model pointnet
+python ../../utils/train.py --model mlp_no_global --epochs 100
+python ../../utils/train.py --model mlp_with_params --hidden 256
+python ../../utils/train.py --model pointnet_with_params --batch_size 4
+```
+
+### 2.2 Surrogate Testing (`22_Surrogate_Testing/`)
+- Runs inference on held-out geometries using a trained model.
+- Generates predicted `.vtp` files and visualizes results.
+
+**How to run**:
+```bash
+cd 2_Surrogate_Building/22_Surrogate_Testing
+python ../../utils/inference.py --vtp_path ./references/data/run_1/boundary_1.vtp \
+    --model_path ./references/best_model.pt \
+    --model pointnet_with_params \
+    --target_faces 10000000000
+python ../../utils/plot_prediction.py --vtp ./output/predicted_....vtp
+```
+
+---
+
+## Stage 3: Deployment
+
+**Location**: `3_Deploy/`
+
+Launches the interactive Streamlit web application that allows users to upload a trained model and run inference on new geometries.
+
+**How to run**:
+```bash
+cd 3_Deploy
+streamlit run ../utils/app.py --server.maxUploadSize=1000 --server.maxMessageSize=1000
+```
+
+The app supports multiple model architectures (selected via dropdown) and includes visualization of predicted Cp, ground truth, absolute error, and relative error.
+
+---
+
+## Setup Instructions
+
+### Setup (one-time)
 ```bash
 cd drivaer_cp_surrogate
 python -m venv venv
@@ -19,42 +110,12 @@ source venv/bin/activate  # or conda
 pip install -r requirements.txt
 ```
 
-## Data Prep (download only needed ~5-6 GB)
-Use HuggingFace to get exactly the 10 train runs + 1-2 held-out test (e.g. run_1 or run_50).
+### Data Prep (download only needed ~5-6 GB)
+Use HuggingFace to download exactly the 10 train runs + 1-2 held-out test (e.g. run_1 or run_50).
 
-See `scripts/download_data.sh` (create it) or run in Python:
-```python
-from huggingface_hub import snapshot_download
-snapshot_download(
-    repo_id="neashton/drivaerml",
-    repo_type="dataset",
-    local_dir="./data",
-    allow_patterns=["run_80/boundary_*.vtp", "run_98/boundary_*.vtp", ... ]  # add the 10 + test
-)
-```
 List of train: run_80,98,102,208,213,281,397,425,445,474. Pick e.g. run_1 as held-out test.
 
-## Preprocess & Train
-```bash
-python preprocess.py --data_dir ./data --out_dir ./processed --target_faces 8000
-python train.py --processed_dir ./processed --epochs 200 --batch_size 2 --lr 1e-3
-```
-- Saves model to models/best_model.pt
-- Logs train/val loss (use 8/2 split or all for demo).
-- With augmentation (jitter, dropout) to combat small data.
-
-## Run Web App (Streamlit)
-```bash
-streamlit run app.py
-```
-- Upload any .vtp (or use built-in held-out example button).
-- Preprocess on-the-fly (same pipeline).
-- Inference: predict Cp field.
-- UI: 3D interactive point cloud (Plotly) colored by pred Cp vs GT if available; histograms, stats (mean Cp, range), diagnostics (mesh size, inference time).
-- Export predicted .vtp for Paraview inspection.
-- Thoughtful UX: clear tabs (Input | Prediction | Diagnostics), color scales matching CFD convention (blue low, red high pressure), quick "Run Inference" button, explanations.
-
-## Demo Outline (for GTM / customer walkthrough, 5-7 min)
+## Demo Outline (for customer walkthrough, 5-7 min)
 1. **Problem & Value**: "Traditional CFD takes hours/days per design iteration. This surrogate predicts surface Cp in seconds from geometry only — enabling rapid exploration in early design."
 2. **Approach (keep high-level)**: "Trained PointNet regressor on decimated surface meshes from 10 DrivAerML cases. Inputs: point coords + normals (pure geometry). Learned to map shape variations to realistic pressure distributions."
 3. **Live Demo**:
@@ -66,7 +127,7 @@ streamlit run app.py
 4. **Limitations & Next**: "With 10 samples, it's a prototype — shows generalization across parametric variants. Scale to full 400+ with GLOBE/PhysicsNeMo or MeshGraphNets for production accuracy. Add uncertainty, full Cf prediction, volume fields later."
 5. **Why compelling for customer**: Fast what-if on new geometries, integrates into design loop, no CFD license needed for inference. Tech stack: PyTorch (train) + Streamlit (deployable app).
 
-## Files
+### Files
 - `preprocess.py`: PyVista load/decimate, extract points/normals/Cp, normalize, save .pt dicts.
 - `train.py`: PointNet model, Dataset, train loop with MSE loss + simple aug.
 - `inference.py`: Reusable preprocess + model forward for new vtp.
@@ -75,12 +136,12 @@ streamlit run app.py
 - `requirements.txt`
 - `demo_slides.md` (expand bullets to 3-5 slides if needed).
 
-## Held-out Test
+### Held-out Test
 After training, `python inference.py --vtp_path data/run_XXX/boundary_XXX.vtp --model models/best_model.pt --out predicted.vtp`
 
 Expect: directional correctness (not noise/constant). Visualize in Paraview: CpMeanTrim vs pred_Cp.
 
-## Tradeoffs & Justifications (for technical interview)
+### Tradeoffs & Justifications
 - Decimation: necessary for laptop training; loses fine details but captures macro pressure patterns.
 - PointNet vs GNN: simpler deps/install, sufficient for prototype; GNN would use mesh edges explicitly but more complex.
 - No PhysicsNeMo/GLOBE: faster to implement/train on CPU; GLOBE excellent for production (equivariant, discretization invariant) but heavier setup.
