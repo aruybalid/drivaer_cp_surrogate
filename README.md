@@ -1,4 +1,5 @@
 # DrivAer Cp Physics-ML Surrogate
+<img src="logo.png" width="50%">
 
 Practical end-to-end solution for Surface-Only Aerodynamics ML + Inference Web App (Prototype)
 
