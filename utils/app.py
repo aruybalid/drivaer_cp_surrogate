@@ -155,7 +155,7 @@ if run_btn and uploaded_model:
     st.success(f"Inference complete in {st.session_state.infer_time:.2f}s")
 
 # ============================================================
-# Tab 2: Predicted Cp + Ground Truth + Absolute Error + Relative Error
+# Tab 2: Predicted Cp + Ground Truth + Absolute Error + Directional Correctness
 # ============================================================
 with tab2:
     st.subheader("Predicted vs Ground Truth Cp Field")
@@ -170,11 +170,11 @@ with tab2:
         if n_points > 300_000:
             marker_size = 2.0
         elif n_points > 200_000:
-            marker_size = 0.8
+            marker_size = 2.3
         elif n_points > 100_000:
-            marker_size = 1.2
+            marker_size = 2.5
         elif n_points > 50_000:
-            marker_size = 1.6
+            marker_size = 3.0
         else:
             marker_size = 2.2
 
@@ -206,7 +206,7 @@ with tab2:
                 fig2.update_layout(scene=dict(aspectmode='data'), height=500)
                 st.plotly_chart(fig2, width='content')
 
-            # Row 2: Absolute Error + Relative Error (side by side)
+            # Row 2: Absolute Error + Directional Correctness
             col1, col2 = st.columns(2)
 
             # --- Absolute Error (log scale) ---
@@ -225,7 +225,6 @@ with tab2:
                     [0.90, 'rgb(249, 175, 60)'],
                     [1.00, 'rgb(252, 254, 164)']
                 ]
-
                 tickvals = [-2, -1.7, -1.3, -1, -0.7, -0.3, 0]
                 ticktext = ['0.01', '0.02', '0.05', '0.1', '0.2', '0.5', '1.0']
 
@@ -239,40 +238,39 @@ with tab2:
                 fig_err.update_layout(scene=dict(aspectmode='data'), height=500)
                 st.plotly_chart(fig_err, width='content')
 
-            # --- Relative Error (log scale) ---
+            # --- Directional Correctness (NEW) ---
             with col2:
-                st.markdown("**Relative Error (log scale)**")
-                rel_error = np.abs(processed.cell_data['pred_Cp'] - processed.cell_data['GT_Cp']) / \
-                            (np.abs(processed.cell_data['GT_Cp']) + 1e-8)
-                log_rel_error = np.log10(rel_error + 1e-8)
+                st.markdown("**Directional Correctness**")
+                pred = processed.cell_data['pred_Cp']
+                gt = processed.cell_data['GT_Cp']
+                direction_correct = (np.sign(pred) == np.sign(gt)).astype(float)
 
-                fig_rel = go.Figure(data=[go.Scatter3d(
+                fig_dir = go.Figure(data=[go.Scatter3d(
                     x=centers[:, 0], y=centers[:, 1], z=centers[:, 2],
                     mode='markers',
-                    marker=dict(size=marker_size, color=log_rel_error,
-                                colorscale=inferno_explicit, cmin=-2, cmax=0,
-                                colorbar=dict(title="Rel. Error", tickvals=tickvals, ticktext=ticktext)),
+                    marker=dict(
+                        size=marker_size,
+                        color=direction_correct,
+                        colorscale='RdYlGn',
+                        cmin=0,
+                        cmax=1,
+                        colorbar=dict(title="Correct Sign (1=Yes)")
+                    ),
                 )])
-                fig_rel.update_layout(scene=dict(aspectmode='data'), height=500)
-                st.plotly_chart(fig_rel, width='content')
+                fig_dir.update_layout(scene=dict(aspectmode='data'), height=500)
+                st.plotly_chart(fig_dir, width='content')
 
-            # Metrics row
-            col1, col2, col3, col4 = st.columns(4)
-            error = processed.cell_data['error']
-            rel_error = np.abs(processed.cell_data['pred_Cp'] - processed.cell_data['GT_Cp']) / \
-                        (np.abs(processed.cell_data['GT_Cp']) + 1e-8)
-
+            # Metrics
+            col1, col2, col3 = st.columns(3)
             with col1:
-                st.metric("Mean Abs Error", f"{error.mean():.4f}")
+                st.metric("Mean Absolute Error", f"{error.mean():.4f}")
             with col2:
-                st.metric("Median Abs Error", f"{np.median(error):.4f}")
+                st.metric("Max Absolute Error", f"{error.max():.4f}")
             with col3:
-                st.metric("Mean Rel Error", f"{rel_error.mean():.4f}")
-            with col4:
-                st.metric("Median Rel Error", f"{np.median(rel_error):.4f}")
+                correct_pct = direction_correct.mean() * 100
+                st.metric("Directional Correctness", f"{correct_pct:.1f}%")
 
         else:
-            # No ground truth available
             st.markdown("**Predicted Cp**")
             fig = go.Figure(data=[go.Scatter3d(
                 x=centers[:, 0], y=centers[:, 1], z=centers[:, 2],

@@ -1,7 +1,8 @@
 """
 plot_prediction.py
 Interactive 3D viewer for inference results.
-Shows predicted Cp, ground truth (if available), absolute error, and relative error.
+Shows predicted Cp, ground truth (if available), absolute error, relative error,
+and directional correctness.
 """
 
 import pyvista as pv
@@ -15,41 +16,61 @@ def plot_prediction(vtp_path: str, show_relative: bool = True):
     print(f"Loaded: {vtp_path}")
     print("Available arrays:", mesh.cell_data.keys())
 
-    # Compute relative error if possible
     if 'pred_Cp' in mesh.cell_data and 'GT_Cp' in mesh.cell_data:
         pred = mesh.cell_data['pred_Cp']
         gt = mesh.cell_data['GT_Cp']
-        rel_error = np.log10(np.abs(pred - gt) / (np.abs(gt) + 1e-12))
-        error = np.log10(np.abs(pred - gt) + 1e-12)
-        mesh.cell_data['rel_error'] = rel_error
-        mesh.cell_data['error'] = error
-        print(f"Relative error computed. Mean = {rel_error.mean():.4f}")
 
-    # Choose which scalars to show
+        # Absolute error (log scale)
+        abs_error = np.abs(pred - gt) + 1e-12
+        mesh.cell_data['abs_error'] = np.log10(abs_error)
+
+        # Relative error (log scale)
+        rel_error = np.abs(pred - gt) / (np.abs(gt) + 1e-12)
+        mesh.cell_data['rel_error'] = np.log10(rel_error + 1e-12)
+
+        # Directional correctness
+        direction_correct = (np.sign(pred) == np.sign(gt)).astype(float)
+        mesh.cell_data['direction_correct'] = direction_correct
+
+        print(f"Directional correctness: {direction_correct.mean() * 100:.1f}%")
+
+    # Define which scalars to show
     scalars_to_show = []
     if 'pred_Cp' in mesh.cell_data:
         scalars_to_show.append('pred_Cp')
     if 'GT_Cp' in mesh.cell_data:
         scalars_to_show.append('GT_Cp')
-    if 'error' in mesh.cell_data:
-        scalars_to_show.append('error')
+    if 'abs_error' in mesh.cell_data:
+        scalars_to_show.append('abs_error')
     if 'rel_error' in mesh.cell_data and show_relative:
         scalars_to_show.append('rel_error')
+    if 'direction_correct' in mesh.cell_data:
+        scalars_to_show.append('direction_correct')
 
     if not scalars_to_show:
         print("No prediction arrays found!")
         return
 
-    # Interactive multi-view plot
+    # Create multi-view plot with dark background
     n = len(scalars_to_show)
     plotter = pv.Plotter(shape=(1, n), window_size=(300 * n, 800))
+    plotter.set_background("#1e1e1e")   # Dark background
 
     for i, name in enumerate(scalars_to_show):
         plotter.subplot(0, i)
-        clim = [-1.2, 1.2]
-        if name in ['error', 'rel_error']:
+
+        if name == 'direction_correct':
+            clim = [0, 1]
+            cmap = "RdYlGn"
+            title = "Direction Correct\n(1=correct sign)"
+        elif name in ['abs_error', 'rel_error']:
             clim = (-2, 0)
-        cmap = "coolwarm" if name in ['pred_Cp', 'GT_Cp'] else "magma"
+            cmap = "magma"
+            title = name
+        else:
+            clim = [-1.2, 1.2]
+            cmap = "coolwarm"
+            title = name
 
         plotter.add_mesh(
             mesh,
@@ -57,9 +78,9 @@ def plot_prediction(vtp_path: str, show_relative: bool = True):
             cmap=cmap,
             clim=clim,
             show_scalar_bar=True,
-            scalar_bar_args={"title": name}
+            scalar_bar_args={"title": title, "color": "white"}
         )
-        plotter.add_text(name, position="upper_edge", font_size=12)
+        plotter.add_text(name, position="upper_edge", font_size=12, color="white")
 
     plotter.link_views()
     plotter.show()
@@ -68,9 +89,9 @@ def plot_prediction(vtp_path: str, show_relative: bool = True):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--vtp', type=str, required=True,
-                        help='Path to the predicted .vtp file (e.g. ./output/predicted_run_1.vtp)')
+                        help='Path to the predicted .vtp file')
     parser.add_argument('--no_rel', action='store_true',
-                        help='Do not compute/show relative error')
+                        help='Do not show relative error')
     args = parser.parse_args()
 
     plot_prediction(args.vtp, show_relative=not args.no_rel)

@@ -1,15 +1,29 @@
 # DrivAer Cp Physics-ML Surrogate
 
-Practical end-to-end solution for Surface-Only Aerodynamics ML + Inference Web App.
+Practical end-to-end solution for Surface-Only Aerodynamics ML + Inference Web App (Prototype)
 
-**Core Idea**: Decimate surface meshes from boundary_i.vtp to ~5k points. Use a point cloud-based regressor of different forms (pure PyTorch, e.g., MLP, PointNet), taking normalized coords + normals to predict CpMeanTrim per point. Captures local geometry + global shape context. Trains fast on laptop CPU/GPU. Produces directionally correct fields (stagnation, acceleration zones) on held-out meshes.
+Given a surface geometry (.vtp file), a neural net, trained on CFD computations, predicts the surface pressure coefficient ($C_p$) in minutes:
+$$
+C_p = \frac{p - p_\infty}{\frac{1}{2} \rho U_\infty^2}
+$$
+
+Where:
+- \( p \) = local static pressure on the surface
+- \( p_\infty \) = freestream static pressure
+- \( \rho \) = freestream density
+- \( U_\infty \) = freestream velocity
+
+**Core Idea**: 
+-  Decimate surface meshes from boundary_i.vtp to ~5k points. 
+-  Use a point cloud-based regressor of different forms (pure PyTorch, e.g., MLP/PointNet), taking normalized coords + normals to learn CpMeanTrim per point. 
+-  Captures local geometry + global shape context (PointNet through global feature branch). 
+-  Trains fast on laptop CPU/GPU. 
+-  As a prototype: produces directionally correct fields (stagnation, acceleration zones) on held-out meshes. Trained only on 10 geometries (prototype).
 
 **Why this approach**:
-- Only surface geometry (points, normals derived from vtp).
-- Practical: decimation + lightweight model fits 1-week scope + limited resources.
-- Physics-ML flavor: respects mesh geometry via point cloud + normals; equivariant-ish via normalization.
-- Better than pure MLP (global context via PointNet pooling); simpler than full GNN/PhysicsNeMo for quick execution.
-- Absolute accuracy secondary; focus on learning non-trivial mapping.
+- Only surface geometry (points, normals derived from .vtp).
+- Practical: decimation + lightweight model (MLP) for prototyping + limited resources.
+- With limited training samples (only 10), **simplicity trumps complexity**: MLP is less prone to overfitting (tested against PointNet + global param branch), and more practical than full GNN for quick execution.
 
 ---
 
@@ -115,18 +129,6 @@ Use HuggingFace to download exactly the 10 train runs + 1-2 held-out test (e.g. 
 
 List of train: run_80,98,102,208,213,281,397,425,445,474. Pick e.g. run_1 as held-out test.
 
-## Demo Outline (for customer walkthrough, 5-7 min)
-1. **Problem & Value**: "Traditional CFD takes hours/days per design iteration. This surrogate predicts surface Cp in seconds from geometry only — enabling rapid exploration in early design."
-2. **Approach (keep high-level)**: "Trained PointNet regressor on decimated surface meshes from 10 DrivAerML cases. Inputs: point coords + normals (pure geometry). Learned to map shape variations to realistic pressure distributions."
-3. **Live Demo**:
-   - Load held-out .vtp (or upload).
-   - Click "Run Inference".
-   - Show side-by-side: input mesh | predicted Cp field (interactive 3D, rotate/zoom).
-   - Highlight: stagnation at front (~Cp=1), low pressure on roof/fast areas, base wake effects — directionally matches physics/CFD expectations.
-   - Diagnostics panel: error vs GT (if avail), Cp histogram match, integrated rough force proxy.
-4. **Limitations & Next**: "With 10 samples, it's a prototype — shows generalization across parametric variants. Scale to full 400+ with GLOBE/PhysicsNeMo or MeshGraphNets for production accuracy. Add uncertainty, full Cf prediction, volume fields later."
-5. **Why compelling for customer**: Fast what-if on new geometries, integrates into design loop, no CFD license needed for inference. Tech stack: PyTorch (train) + Streamlit (deployable app).
-
 ### Files
 - `preprocess.py`: PyVista load/decimate, extract points/normals/Cp, normalize, save .pt dicts.
 - `train.py`: PointNet model, Dataset, train loop with MSE loss + simple aug.
@@ -144,9 +146,8 @@ Expect: directional correctness (not noise/constant). Visualize in Paraview: CpM
 ### Tradeoffs & Justifications
 - Decimation: necessary for laptop training; loses fine details but captures macro pressure patterns.
 - PointNet vs GNN: simpler deps/install, sufficient for prototype; GNN would use mesh edges explicitly but more complex.
-- No PhysicsNeMo/GLOBE: faster to implement/train on CPU; GLOBE excellent for production (equivariant, discretization invariant) but heavier setup.
 - Small data: augmentation + early stopping key; shows idea works.
-- Web app: focused on customer experience (intuitive, visual, actionable diagnostics) over fancy hosting.
+- Web app: focused on quick deployment and customer experience (intuitive, visual, actionable diagnostics)
 
 ## Customer Walkthrough
 ### Slide 1: The Challenge with Traditional CFD
@@ -189,6 +190,7 @@ Speed: Inference in seconds vs. hours/days with traditional CFD
 Usability: Interactive web app allows engineers to upload geometries and instantly see predicted pressure fields
 Performance: Strong directional accuracy on unseen geometries (stagnation, acceleration, wake effects)
 Scalability: Model trained on only 10 cases yet generalizes well across parametric variants
+
 Business Value:
 
 Enable 10x–100x more design iterations in early phases
@@ -200,3 +202,4 @@ Suggested Slide Titles (for your deck).
 - The Bottleneck in Aerodynamic Design  
 - A Fast, Geometry-Driven Surrogate Model  
 - Accelerating Design Through Instant Predictions  
+
