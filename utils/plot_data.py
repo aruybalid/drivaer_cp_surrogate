@@ -74,7 +74,7 @@ def interactive_viewer(files):
                 scalars="CpMeanTrim",
                 cmap="coolwarm",
                 show_scalar_bar=True,
-                clim=[-2.5, 1.5],
+                clim=[-2.5, 1.01],
                 scalar_bar_args={"title": "CpMeanTrim", "color": "white"}
             )
         else:

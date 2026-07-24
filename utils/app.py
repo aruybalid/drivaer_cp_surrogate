@@ -16,7 +16,16 @@ from inference import predict_cp
 from model_factory import MODEL_REGISTRY
 
 st.set_page_config(page_title="DrivAer Cp Surrogate", layout="wide")
-st.title("🚗 DrivAer Surface Pressure Coefficient Predictor")
+# st.title("🚗 DrivAer Surface Pressure Coefficient Predictor")
+# Create two columns: one narrow for the logo, one wide for the title
+col1, col2 = st.columns([1, 10])   # Adjust the ratio as needed
+
+with col1:
+    st.image("../logo.png", width=250)   # Adjust width to your liking
+
+with col2:
+    st.header("DrivAer Surface Pressure Coefficient Predictor")
+
 st.caption("Upload a trained model (.pt) + geometry (.vtp) → Run inference")
 
 # ============================================================
@@ -188,7 +197,7 @@ with tab2:
                     x=centers[:, 0], y=centers[:, 1], z=centers[:, 2],
                     mode='markers',
                     marker=dict(size=marker_size, color=processed.cell_data['pred_Cp'],
-                                colorscale='RdBu_r', cmin=-1.2, cmax=1.2,
+                                colorscale='RdBu_r', cmin=-1.2, cmax=1.01, cmid=0,
                                 colorbar=dict(title="Cp")),
                 )])
                 fig1.update_layout(scene=dict(aspectmode='data'), height=500)
@@ -200,7 +209,7 @@ with tab2:
                     x=centers[:, 0], y=centers[:, 1], z=centers[:, 2],
                     mode='markers',
                     marker=dict(size=marker_size, color=processed.cell_data['GT_Cp'],
-                                colorscale='RdBu_r', cmin=-1.2, cmax=1.2,
+                                colorscale='RdBu_r', cmin=-1.2, cmax=1.01, cmid=0,
                                 colorbar=dict(title="Cp")),
                 )])
                 fig2.update_layout(scene=dict(aspectmode='data'), height=500)

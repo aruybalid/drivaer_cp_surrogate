@@ -68,7 +68,7 @@ def plot_prediction(vtp_path: str, show_relative: bool = True):
             cmap = "magma"
             title = name
         else:
-            clim = [-1.2, 1.2]
+            clim = [-1.2, 1.01]
             cmap = "coolwarm"
             title = name
 
