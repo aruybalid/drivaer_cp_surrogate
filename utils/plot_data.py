@@ -18,6 +18,9 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import argparse
 
+# Apply dark theme to all matplotlib plots
+plt.style.use('dark_background')
+
 # ============================================================
 # Argument parser
 # ============================================================
@@ -53,10 +56,11 @@ def find_vtp_files(dataset_num=None):
 vtp_files = find_vtp_files(args.dataset)
 
 # ============================================================
-# 2. Interactive 3D viewer (cycle through files)
+# 2. Interactive 3D viewer (cycle through files) - Dark Theme
 # ============================================================
 def interactive_viewer(files):
     plotter = pv.Plotter()
+    plotter.set_background("#1e1e1e")          # Dark background
     current_idx = [0]
 
     def load_mesh(idx):
@@ -71,12 +75,13 @@ def interactive_viewer(files):
                 cmap="coolwarm",
                 show_scalar_bar=True,
                 clim=[-2.5, 1.5],
-                scalar_bar_args={"title": "CpMeanTrim"}
+                scalar_bar_args={"title": "CpMeanTrim", "color": "white"}
             )
         else:
             plotter.add_mesh(mesh, color="lightgray")
 
-        plotter.add_text(f"{files[idx].name}  ({idx+1}/{len(files)})", position="upper_edge", font_size=12)
+        plotter.add_text(f"{files[idx].name}  ({idx+1}/{len(files)})", 
+                         position="upper_edge", font_size=12, color="white")
         plotter.render()
 
     def next_mesh():
@@ -108,7 +113,6 @@ if args.global_plots:
     records = []
 
     for vtp in vtp_files:
-        # Extract run number from parent folder name (e.g. "run_98")
         run_id = vtp.parent.name.split("_")[1]
         csv_path = vtp.parent / f"geo_parameters_{run_id}.csv"
 
@@ -116,11 +120,9 @@ if args.global_plots:
             print(f"Warning: {csv_path} not found. Skipping.")
             continue
 
-        # Read geo parameters (single-row CSV)
         geo_df = pd.read_csv(csv_path)
         geo = geo_df.iloc[0].to_dict()
 
-        # Load mesh and compute pressure metrics
         mesh = pv.read(str(vtp))
         cp = mesh.cell_data.get("CpMeanTrim", mesh.point_data.get("CpMeanTrim", None))
         if cp is None:
@@ -160,23 +162,36 @@ if args.global_plots:
         print(f"\nUsing parameters: {param1}, {param2}")
 
         # ============================================================
-        # 5. Two line plots
+        # 5. Two line plots (Dark Theme)
         # ============================================================
-        fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+        fig, axes = plt.subplots(1, 2, figsize=(14, 5), facecolor="#1e1e1e")
+        fig.patch.set_facecolor("#1e1e1e")
 
         df_sorted1 = df.sort_values(param1)
-        axes[0].plot(df_sorted1[param1], df_sorted1["mean_Cp"], marker="o", linewidth=2)
-        axes[0].set_xlabel(param1)
-        axes[0].set_ylabel("Mean Cp")
-        axes[0].set_title(f"Mean Cp vs {param1}")
-        axes[0].grid(True, alpha=0.3)
+        axes[0].plot(df_sorted1[param1], df_sorted1["mean_Cp"], marker="o", linewidth=2, color="#00d4ff")
+        axes[0].set_xlabel(param1, color="white")
+        axes[0].set_ylabel("Mean Cp", color="white")
+        axes[0].set_title(f"Mean Cp vs {param1}", color="white")
+        axes[0].tick_params(colors="white")
+        axes[0].set_facecolor("#1e1e1e")
+        axes[0].spines['bottom'].set_color('white')
+        axes[0].spines['left'].set_color('white')
+        axes[0].spines['top'].set_color('white')
+        axes[0].spines['right'].set_color('white')
+        axes[0].grid(True, alpha=0.3, color="white")
 
         df_sorted2 = df.sort_values(param2)
-        axes[1].plot(df_sorted2[param2], df_sorted2["Cp_range"], marker="s", color="darkorange", linewidth=2)
-        axes[1].set_xlabel(param2)
-        axes[1].set_ylabel("Cp Range (max - min)")
-        axes[1].set_title(f"Cp Range vs {param2}")
-        axes[1].grid(True, alpha=0.3)
+        axes[1].plot(df_sorted2[param2], df_sorted2["Cp_range"], marker="s", color="#ff7f0e", linewidth=2)
+        axes[1].set_xlabel(param2, color="white")
+        axes[1].set_ylabel("Cp Range (max - min)", color="white")
+        axes[1].set_title(f"Cp Range vs {param2}", color="white")
+        axes[1].tick_params(colors="white")
+        axes[1].set_facecolor("#1e1e1e")
+        axes[1].spines['bottom'].set_color('white')
+        axes[1].spines['left'].set_color('white')
+        axes[1].spines['top'].set_color('white')
+        axes[1].spines['right'].set_color('white')
+        axes[1].grid(True, alpha=0.3, color="white")
 
         plt.tight_layout()
         plt.show()

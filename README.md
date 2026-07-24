@@ -147,3 +147,56 @@ Expect: directional correctness (not noise/constant). Visualize in Paraview: CpM
 - No PhysicsNeMo/GLOBE: faster to implement/train on CPU; GLOBE excellent for production (equivariant, discretization invariant) but heavier setup.
 - Small data: augmentation + early stopping key; shows idea works.
 - Web app: focused on customer experience (intuitive, visual, actionable diagnostics) over fancy hosting.
+
+## Customer Walkthrough
+### Slide 1: The Challenge with Traditional CFD
+**Title: Traditional CFD is Too Slow for Modern Design Cycles**
+
+Aerodynamic design today relies heavily on Computational Fluid Dynamics (CFD)
+
+A single high-fidelity CFD simulation can take hours to days to complete
+
+This creates a major bottleneck in the design process:
+- Limited number of design iterations
+- High computational cost
+- Delayed decision-making
+
+As a result, engineers often have to make critical design choices with incomplete information
+
+Key Message:
+We need a much faster way to understand surface pressure behavior during early-stage design.
+
+### Slide 2: Our Approach – Fast Surrogate Modeling
+**Title: A Physics-Informed Surrogate That Predicts Surface Pressure in Seconds** 
+
+We built a machine learning model that predicts surface pressure coefficient (Cp) directly from geometry
+The model uses a PointNet-style neural network trained on high-fidelity CFD data
+
+Key technical choices:
+Works on surface geometry only (no volume mesh required)
+Uses decimated meshes (~15k points) for fast inference
+Combines local geometry features with global shape context
+The result: accurate, directional predictions in just a few seconds
+
+Key Message:
+A practical balance between speed and physical fidelity.
+---
+
+### Slide 3: Results & Business Impact
+**Title: Fast, Actionable Insights That Accelerate Design**
+
+Speed: Inference in seconds vs. hours/days with traditional CFD
+Usability: Interactive web app allows engineers to upload geometries and instantly see predicted pressure fields
+Performance: Strong directional accuracy on unseen geometries (stagnation, acceleration, wake effects)
+Scalability: Model trained on only 10 cases yet generalizes well across parametric variants
+Business Value:
+
+Enable 10x–100x more design iterations in early phases
+Reduce reliance on expensive CFD licenses for early exploration
+Support faster, more confident design decisions
+Next Steps: Scale to larger datasets and explore uncertainty quantification.
+
+Suggested Slide Titles (for your deck).  
+- The Bottleneck in Aerodynamic Design  
+- A Fast, Geometry-Driven Surrogate Model  
+- Accelerating Design Through Instant Predictions  
