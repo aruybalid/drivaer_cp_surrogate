@@ -32,10 +32,11 @@ pt_files = find_processed_files(args.dataset)
 print(f"Found {len(pt_files)} processed files.")
 
 # ============================================================
-# Interactive viewer
+# Interactive viewer (Dark Theme)
 # ============================================================
 def interactive_viewer(files):
     plotter = pv.Plotter()
+    plotter.set_background("#1e1e1e")          # Dark background
     current_idx = [0]
 
     def load_cloud(idx):
@@ -54,10 +55,11 @@ def interactive_viewer(files):
             render_points_as_spheres=False,
             point_size=4,
             show_scalar_bar=True,
-            clim=[-2.5, 1.5],
-            scalar_bar_args={"title": "CpMeanTrim"}
+            clim=[-2.5, 1.01],
+            scalar_bar_args={"title": "CpMeanTrim", "color": "white"}
         )
-        plotter.add_text(f"{files[idx].name}  ({idx+1}/{len(files)})", position="upper_edge", font_size=12)
+        plotter.add_text(f"{files[idx].name}  ({idx+1}/{len(files)})", 
+                         position="upper_edge", font_size=12, color="white")
         plotter.render()
 
     def next_cloud():
