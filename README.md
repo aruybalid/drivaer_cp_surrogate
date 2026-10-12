@@ -6,9 +6,9 @@ Built on the DrivAerML dataset (https://huggingface.co/datasets/neashton/drivaer
 
 Given a surface geometry (.vtp file), a neural net, trained on CFD computations, predicts the surface **pressure coefficient** ($C_p$) in minutes:
 
-$
+$$
 C_p = \frac{p - p_\infty}{\frac{1}{2} \rho U_\infty^2}
-$
+$$
 
 Where:
 - $p$ = local static pressure on the surface
