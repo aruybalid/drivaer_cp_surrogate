@@ -1,18 +1,19 @@
 # DrivAer Cp Physics-ML Surrogate
-<img src="logo.png" width="50%">
+**Physics-Informed Surrogate Modeling Pipeline**  
+An end-to-end Physics-AI framework that learns surface pressure distributions directly from 3D geometry, delivering near real-time aerodynamic predictions without running expensive CFD simulations.  
 
-Practical end-to-end solution for Surface-Only Aerodynamics ML + Inference Web App (Prototype)
+Built on the DrivAerML dataset (https://huggingface.co/datasets/neashton/drivaerml), this production-grade prototype covers the full workflow: mesh decimation → physics-aware feature engineering → neural surrogate training (PointNet/MLP) → interactive Streamlit inference app.
 
-Given a surface geometry (.vtp file), a neural net, trained on CFD computations, predicts the surface pressure coefficient ($C_p$) in minutes:
+Given a surface geometry (.vtp file), a neural net, trained on CFD computations, predicts the surface **pressure coefficient** ($C_p$) in minutes:
 $$
 C_p = \frac{p - p_\infty}{\frac{1}{2} \rho U_\infty^2}
 $$
 
 Where:
-- \( p \) = local static pressure on the surface
-- \( p_\infty \) = freestream static pressure
-- \( \rho \) = freestream density
-- \( U_\infty \) = freestream velocity
+- $p$ = local static pressure on the surface
+- $p_\infty$ = freestream static pressure
+- $\rho$ = freestream density
+- $U_\infty$ = freestream velocity
 
 **Core Idea**: 
 -  Decimate surface meshes from boundary_i.vtp to ~5k points. 
@@ -25,6 +26,24 @@ Where:
 - Only surface geometry (points, normals derived from .vtp).
 - Practical: decimation + lightweight model (MLP) for prototyping + limited resources.
 - With limited training samples (only 10), **simplicity trumps complexity**: MLP is less prone to overfitting (tested against PointNet + global param branch), and more practical than full GNN for quick execution.
+
+---
+
+## Installation
+
+### Using venv + pip
+```bash
+python -m venv venv
+source venv/bin/activate   # On Windows: venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+### Using conda
+```bash
+conda create -n drivaer python=3.10 -y
+conda activate drivaer
+pip install -r requirements.txt
+```
 
 ---
 
@@ -115,37 +134,20 @@ The app supports multiple model architectures (selected via dropdown) and includ
 
 ---
 
-## Setup Instructions
+## Data Requirements
 
-### Setup (one-time)
-```bash
-cd drivaer_cp_surrogate
-python -m venv venv
-source venv/bin/activate  # or conda
-pip install -r requirements.txt
-```
+Download only the required subset (~5–6 GB) from Hugging Face:
 
-### Data Prep (download only needed ~5-6 GB)
-Use HuggingFace to download exactly the 10 train runs + 1-2 held-out test (e.g. run_1 or run_50).
+**Training geometries**: `run_80, 98, 102, 208, 213, 281, 397, 425, 445, 474`
+**Held-out test**: e.g. `run_1` or `run_50`
 
-List of train: run_80,98,102,208,213,281,397,425,445,474. Pick e.g. run_1 as held-out test.
+## Key Engineering Highlights
 
-### Files
-- `preprocess.py`: PyVista load/decimate, extract points/normals/Cp, normalize, save .pt dicts.
-- `train.py`: PointNet model, Dataset, train loop with MSE loss + simple aug.
-- `inference.py`: Reusable preprocess + model forward for new vtp.
-- `app.py`: Streamlit UI with tabs, Plotly viz, export.
-- `model.py`: PointNet definition (clean, commented).
-- `requirements.txt`
-- `demo_slides.md` (expand bullets to 3-5 slides if needed).
+- **Lightweight surrogate**: PointNet / MLP trained on only 10 geometries → directional accuracy on unseen shapes.
+- **Production-ready inference**: Streamlit app with model switching, error visualization, and export capabilities.
+- **Practical trade-offs**: Mesh decimation to ~5k points + simple architectures chosen for speed and robustness on limited data.
+- **Physics-aware features**: Surface normals + global shape context used as input; CpMeanTrim learned as target.
 
-### Held-out Test
-After training, `python inference.py --vtp_path data/run_XXX/boundary_XXX.vtp --model models/best_model.pt --out predicted.vtp`
+## Results
 
-Expect: directional correctness (not noise/constant). Visualize in Paraview: CpMeanTrim vs pred_Cp.
-
-### Tradeoffs & Justifications
-- Decimation: necessary for laptop training; loses fine details but captures macro pressure patterns.
-- PointNet vs GNN: simpler deps/install, sufficient for prototype; GNN would use mesh edges explicitly but more complex.
-- Small data: augmentation + early stopping key; shows idea works.
-- Web app: focused on quick deployment and customer experience (intuitive, visual, actionable diagnostics)
+The interactive Streamlit app (`3_Deploy/`) provides visual evaluation of model predictions, including side-by-side comparison of predicted vs. ground-truth $C_p$ fields, absolute error, and relative error maps. This allows direct assessment of surrogate quality on held-out geometries.
