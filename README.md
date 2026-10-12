@@ -5,9 +5,10 @@ An end-to-end Physics-AI framework that learns surface pressure distributions di
 Built on the DrivAerML dataset (https://huggingface.co/datasets/neashton/drivaerml), this production-grade prototype covers the full workflow: mesh decimation → physics-aware feature engineering → neural surrogate training (PointNet/MLP) → interactive Streamlit inference app.
 
 Given a surface geometry (.vtp file), a neural net, trained on CFD computations, predicts the surface **pressure coefficient** ($C_p$) in minutes:
-$$
+
+$
 C_p = \frac{p - p_\infty}{\frac{1}{2} \rho U_\infty^2}
-$$
+$
 
 Where:
 - $p$ = local static pressure on the surface
