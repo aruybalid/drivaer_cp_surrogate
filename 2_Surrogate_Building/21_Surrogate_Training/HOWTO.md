@@ -1,10 +1,10 @@
 ## 2.1 Surrogate Training
 
 ## What the Stage Does
-1. Trains a point-based mlp-based regressor (of various kinds, e.g., pure MLP, PointNet (global feature aggregation), on the preprocessed (decimated) data. Uses the model coded in `../utils/model.py`.
+1. Trains a point-based mlp-based regressor of various kinds, e.g., pure MLP, PointNet (global feature aggregation), on the preprocessed (decimated) data. Uses the model coded in `../utils/model.py`.
 
 ## How to Run
-Move the `processed` data from the previous `output` folder to this stages `references` folder. Pick either one of these models:
+Move the `processed` data from the previous `output` folder to this stages `references` folder. Pick either one of these models:c
 
 ```bash
 python ../../utils/train.py --model pointnet

@@ -21,7 +21,7 @@ st.set_page_config(page_title="DrivAer Cp Surrogate", layout="wide")
 col1, col2 = st.columns([1, 10])   # Adjust the ratio as needed
 
 with col1:
-    st.image("../logo.png", width=250)   # Adjust width to your liking
+    st.image("./references/logo.png", width=250)   # Adjust width to your liking
 
 with col2:
     st.header("DrivAer Surface Pressure Coefficient Predictor")
